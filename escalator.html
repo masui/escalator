@@ -1,0 +1,238 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>title</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/0.4.20/p5.js"></script>
+<script type="text/javascript">
+STRATEGY1 = 0; // 左優先
+STRATEGY2 = 1; // 右優先
+
+lspeedfactor = 1.0;
+lgapfactor = 2.0;
+rspeedfactor = 2.0;
+rgapfactor = 3.0;
+strategy = STRATEGY2;
+
+var pair = location.search.substring(1).split('&');
+for(var i=0; pair[i]; i++){
+  var kv = pair[i].split('=');
+  if(kv[0] == 'ls') lspeedfactor = kv[1];
+  if(kv[0] == 'lg') lgapfactor = kv[1];
+  if(kv[0] == 'rs') rspeedfactor = kv[1];
+  if(kv[0] == 'rg') rgapfactor = kv[1];
+}
+
+MOVING_LOWER = 0;
+WAITING_LOWER = 1;
+ASCENDING = 2;
+UPPER = 3;
+
+LEFT = 0;
+RIGHT = 1;
+
+llane = 220.0;
+rlane = 250.0;
+escheight = 460.0;
+
+WINWIDTH = 500;
+WINHEIGHT = 500;
+
+NPERSONS = 50;
+NSTAIRS = 15;
+STAIRHEIGHT = 60;
+STEPUNIT = 1;
+steppos = 0;
+waiting_l = 0;
+waiting_r = 0;
+done = false;
+xspeed = 1.0;
+
+persons = [];;
+
+loops = 0;
+
+var Person = function(){
+  this.x = 0.0;
+  this.y = 0.0;
+  this.status = MOVING_LOWER;
+  this.lr = LEFT;
+};  
+
+function setup(){
+  createCanvas(WINWIDTH,WINHEIGHT);
+  frameRate(60);
+  for(var i=0;i<NPERSONS;i++){
+    persons[i] = new Person();
+  }
+}
+
+function can_ascend_l(n){
+  var result = true;
+  for(var i=0;i<n;i++){
+    if(persons[i].status == ASCENDING &&
+      persons[i].lr == LEFT &&
+      persons[i].y - persons[n].y < STAIRHEIGHT * lgapfactor){
+      return false;
+    }
+  }
+  return true;
+}
+
+function can_ascend_r(n){
+  for(var i=0;i<n;i++){
+    if(persons[i].status == ASCENDING &&
+      persons[i].lr == RIGHT &&
+      persons[i].y - persons[n].y < STAIRHEIGHT * rgapfactor){
+      return false;
+    }
+  }
+  return true;
+}
+
+function can_forward_lower(n){
+  for(var i=0;i<n;i++){
+    if(persons[i].status == MOVING_LOWER &&
+       persons[i].x - persons[n].y < 30.0){
+       return false;
+    }
+  }
+  return true;
+}
+
+function can_forward_upper(n){
+  for(var i=0;i<NPERSONS;i++){
+    if(persons[i].status == UPPER &&
+       persons[i].x - persons[n].x > 0.0 &&
+       persons[i].x - persons[n].x < 30.0){
+       return false;
+     }
+  }
+  return true;
+}
+
+function all_upper(){
+  for(var i=0;i<NPERSONS;i++){
+    if(persons[i].status != UPPER) return false;
+  }
+  return true;
+}
+
+function draw(){
+  if(done) return;
+
+  background(213,200,255);
+
+  for(var i=0;i<NSTAIRS;i++){
+    y = i * STAIRHEIGHT + steppos;
+    //line(llane-10+10,WINHEIGHT-y,rlane+10+20+10,WINHEIGHT-y);
+    fill(200,200,200);
+    strokeWeight(0);
+    rect(llane-10+10,WINHEIGHT-y,rlane-llane+40,STAIRHEIGHT/2);
+  }
+
+  steppos += STEPUNIT;
+  if(steppos >= STAIRHEIGHT){
+    steppos = 0;
+  }
+
+  for(var i=0;i<NPERSONS;i++){ // 駒をひとつずつ進める。
+    switch(persons[i].status){
+    case MOVING_LOWER: // 下で移動中
+      if(persons[i].x >= llane && // 左レーンまでたどりついたとき
+         persons[i].lr == LEFT){
+        if(strategy == STRATEGY1){
+          if(waiting_l == 0 || waiting_l < waiting_r){ 
+            persons[i].status = WAITING_LOWER;
+            persons[i].x = llane;
+            waiting_l++;
+          }
+          else {
+            persons[i].lr = RIGHT; // 右で待つことにする
+          }
+        }
+        else if(strategy == STRATEGY2){
+          if(waiting_l < waiting_r){ 
+            persons[i].status = WAITING_LOWER;
+            persons[i].x = llane;
+            waiting_l++;
+          }
+          else {
+            persons[i].lr = RIGHT; // 右で待つことにする
+          }
+        }
+      }
+      else if(persons[i].x >= rlane && // 右レーンまでたどりついたとき
+              persons[i].lr == RIGHT){
+        persons[i].status = WAITING_LOWER;
+        persons[i].x = rlane;
+        waiting_r++;
+      }
+      if(can_forward_lower(i)){ // 前に進める場合は一歩前に移動する
+        persons[i].x += xspeed;
+      }
+      break;
+    case UPPER: // エスカレータからおりていて
+      if(can_forward_upper(i)){ // 前に進める場合は一歩前に移動する
+        persons[i].x += xspeed;
+      }
+      break;
+    case WAITING_LOWER: // エスカレータ待ち状態で、
+      if(persons[i].lr == LEFT && // 左で待っていて
+         can_ascend_l(i) // 上に余地がある
+      ){
+        persons[i].status = ASCENDING;
+        waiting_l--;
+      }
+      else if(persons[i].lr == RIGHT && // 右で待っていて
+           can_ascend_r(i) // 上に余地がある
+        ){
+        persons[i].status = ASCENDING;
+        waiting_r--;
+      }
+      break;
+    case ASCENDING: //エスカレータに乗っていたら
+      if(persons[i].y >= escheight){  // エスカレータで上まで到達していればおりる
+        persons[i].status = UPPER;
+        persons[i].y = escheight;
+      }
+      else {
+        if(persons[i].lr == LEFT){
+          persons[i].y += STEPUNIT * lspeedfactor; // 1段上に移動する
+        }
+        else {
+          persons[i].y += STEPUNIT * rspeedfactor; // 1段上に移動する
+        }
+      }
+      break;
+    }
+  }
+
+  strokeWeight(1);
+  for(var i=NPERSONS-1;i>=0;i--){
+    fill(255,255,0);
+    rect(persons[i].x+10,WINHEIGHT-30-persons[i].y,20,20);
+    fill(0,0,0);
+    text(i+1,persons[i].x+10+3,WINHEIGHT-30-persons[i].y+14);
+  }
+
+  if(! all_upper()){
+    loops++;
+  }
+  else {
+    done = true;
+  }
+  fill(0,0,0);
+//  text(millis(),20,20);
+  text(loops,20,20);
+
+}
+</script>
+
+<style type="text/css">
+<!--
+-->
+</style>
+</head>
+<body>
+</body>
+</html>
